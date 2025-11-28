@@ -14,21 +14,26 @@ class Overlay(Overlay):
     """
     """
     
-    def __init__(self, bitfile_name=None, init_rf_clks=True, **kwargs):
+    def __init__(self, bitfile_name=None, hwh=None, init_rf_clks=True, **kwargs):
         """
         """
 
         # Generate default bitfile name
         if bitfile_name is None:
             this_dir = os.path.dirname(__file__)
+            print("i got to here...")
             bitfile_name = os.path.join(this_dir, 'rfsoc_ofdm', 'bitstream', 'rfsoc_ofdm.bit')
-
+            hwhfile_name  = os.path.join(this_dir, 'rfsoc_ofdm', 'bitstream', 'rfsoc_ofdm.hwh')
+        print(bitfile_name)
         # Create Overlay
-        super().__init__(bitfile_name, **kwargs)
+        super().__init__(bitfile_name,  **kwargs)
+        print("step 1")
 
         # Determine board and set PLL appropriately
         board = os.environ['BOARD']
         
+        print("hello im here again ")
+        # print(dir(self.rfdc))
         # Extract friendly dataconverter names
         if board == 'RFSoC4x2':
             self.dac_tile = self.rfdc.dac_tiles[2]
@@ -52,23 +57,29 @@ class Overlay(Overlay):
             self.adc_block = self.adc_tile.blocks[0]
         else:
             raise RuntimeError('Unknown error occurred.') # shouldn't get here
-        
+        print(self)
+        print("about to return... i hope i have worked")
+        # return
         # Start up LMX clock
         if init_rf_clks:
             clocks.set_custom_lmclks()
-
+        print("clocks loaded")
         if board == 'ZCU216':
             fs = 1920.00
         else:
-            fs = 3840.00
+            fs =  3932.16#3840.00 #
 
-        self.configure_adcs(sample_freq=fs)
-        self.configure_dacs()
+        # self.configure_adcs(pll_freq=245.76, sample_freq=fs, nyquist_zone=1, centre_freq=-600)
+        self.configure_adcs()#pll_freq=409.6)
+        print("configure_adcs done")
+        # self.configure_dacs(pll_freq=245.76, sample_freq=fs, nyquist_zone=1, centre_freq=600)
+        self.configure_dacs()#pll_freq=409.6)
+        print("configure_dacs done")
         
         self.inspectors = {'transmitter' : self.InspectorTransmitter,
                            'receiver' : self.InspectorReceiver,
                            'constellation' : self.InspectorConstellation}
-          
+        print("inspectors done")
         self.initialise_receiver()
         self.initialise_transmitter()
 
@@ -83,10 +94,11 @@ class Overlay(Overlay):
         self.inspectors['constellation'].get_frame()
         
         
-    def configure_adcs(self, pll_freq=384.00, sample_freq=3840.00, nyquist_zone=1, centre_freq=-600):
+    def configure_adcs(self, pll_freq=384.00, sample_freq=4915.20, nyquist_zone=1, centre_freq=-600):
         """
         """
-        
+        print("inside adcs")
+        print("pll freq = " + str(pll_freq))
         self.adc_tile.DynamicPLLConfig(1, pll_freq, sample_freq)
         self.adc_block.NyquistZone = nyquist_zone
         self.adc_block.MixerSettings = {
@@ -102,12 +114,31 @@ class Overlay(Overlay):
         self.adc_tile.SetupFIFO(True)
         
 
-    def configure_dacs(self, pll_freq=384.00, sample_freq=3840.00, nyquist_zone=1, centre_freq=600):
+    def configure_dacs(self, pll_freq=384.00, sample_freq=4915.20, nyquist_zone=1, centre_freq=600):
         """
         """
-        
+        print("inside dacs")
+        print("pll freq = " + str(pll_freq))
         self.dac_tile.DynamicPLLConfig(1, pll_freq, sample_freq)
+        print("finsihed dynamicPLLConfig")
         self.dac_block.NyquistZone = nyquist_zone
+        print("finsihed nyquist zone")
+        mix = self.dac_block.MixerSettings
+        print("reading mixer settings:")
+        print(str(mix['CoarseMixFreq']))
+        print(str(mix['EventSource']))
+        print(str(mix['FineMixerScale']))
+        print(str(mix['Freq']))
+        print(str(mix['MixerMode']))
+        print(str(mix['MixerType']))
+        print("done reading...")
+        print("'CoarseMixFreq'  : " + str(xrfdc.COARSE_MIX_BYPASS))
+        print("'EventSource'  : " + str(xrfdc.EVNT_SRC_IMMEDIATE))
+        print("'FineMixerScale'  : " + str(xrfdc.MIXER_SCALE_1P0))
+        print("'Freq'  : " + str(centre_freq))
+        print("'MixerMode'  : " + str(xrfdc.MIXER_MODE_C2R))
+        print("'MixerType'  : " + str(xrfdc.MIXER_TYPE_FINE))
+        # print("'PhaseOffset'  : " + str(xrfdc.COARSE_MIX_BYPASS))
         self.dac_block.MixerSettings = {
             'CoarseMixFreq'  : xrfdc.COARSE_MIX_BYPASS,
             'EventSource'    : xrfdc.EVNT_SRC_IMMEDIATE,
@@ -117,8 +148,12 @@ class Overlay(Overlay):
             'MixerType'      : xrfdc.MIXER_TYPE_FINE,
             'PhaseOffset'    : 0.0
         }
-        self.dac_block.UpdateEvent(xrfdc.EVENT_MIXER)
+        print("finsihed mixer settings")
+        print("xrfdc.EVENT_MIXER = " + str(xrfdc.EVENT_MIXER))
+        self.dac_block.UpdateEvent(1)
+        print("finsihed update event")
         self.dac_tile.SetupFIFO(True)
+        print("finsihed setip fifo")
         
         
     def configure_inspectors(self, shape=(1024,)):
@@ -193,19 +228,19 @@ class Overlay(Overlay):
         self.ofdm_transmitter.modulation_dropdown.value = '16-QAM'
         
         # Attempt to start the OFDM constellation receiver
-        #def timeout_handler(signum, frame):
-        #    raise Exception("Function timeout.")
+        def timeout_handler(signum, frame):
+           raise Exception("Function timeout.")
             
-        #signal.signal(signal.SIGALRM, timeout_handler)
-        #signal.alarm(5)
-        #try:
-        self.inspectors['constellation'].get_frame()
-        #except Exception: 
-        #    print("Inspection failed as synchronisation could not be performed. Please ensure that a loopback cable is connected and then restart the notebook.")
-        #signal.alarm(0)
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(5)
+        try:
+            self.inspectors['constellation'].get_frame()
+        except Exception: 
+           print("Inspection failed as synchronisation could not be performed. Please ensure that a loopback cable is connected and then restart the notebook.")
+        signal.alarm(0)
         
         # Start the application and return to notebook
-        #self.inspectors['receiver']._plot_controller.start()
-        #self.inspectors['transmitter']._plot_controller.start()
-        #self.inspectors['constellation']._plot_controller.start()
+        self.inspectors['receiver']._plot_controller.start()
+        self.inspectors['transmitter']._plot_controller.start()
+        self.inspectors['constellation']._plot_controller.start()
         return ipw.HBox([insp_tab, iq_tab])
