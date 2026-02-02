@@ -9,7 +9,7 @@ def _get_lmclk_devices():
     if xrfclk.lmk_devices == [] and xrfclk.lmx_devices == []:
         xrfclk.xrfclk._find_devices()
 
-def _get_custom_lmclks(loc):
+def _get_custom_lmclks(loc, clks=None):
     """Search for LMK and LMX clock files with a given address.
     """
     
@@ -38,11 +38,17 @@ def _get_custom_lmclks(loc):
     
     # Use root directory to extract LMK and LMX locs
     for file in os.listdir(lmclk_loc):
+        print(file)
         if file.endswith('.txt'):
             if 'LMK' in file:
                 lmk_loc = os.path.join(lmclk_loc, file)
             elif 'LMX' in file:
-                lmx_loc = os.path.join(lmclk_loc, file)
+                if str(clks) in file: 
+                    lmx_loc = os.path.join(lmclk_loc, file)
+                    print(lmx_loc)
+                elif lmx_loc == '': 
+                    print("got to else...")
+                    lmx_loc = os.path.join(lmclk_loc, file)
             
     # Check variables are empty
     if lmk_loc == '' or lmx_loc == '':
@@ -79,7 +85,7 @@ def _get_custom_lmclk_props(lmk_loc, lmx_loc):
         lmx_chip, lmx_freq = lmx_split
     else:
         raise ValueError('TICS file names have incorrect format.')
-    print("got here 1")
+    # print("got here 1")
     # Open files and parse registers
     with open(lmk_loc, 'r') as file:
         reg = [line.rstrip("\n") for line in file]
@@ -87,7 +93,7 @@ def _get_custom_lmclk_props(lmk_loc, lmx_loc):
     with open(lmx_loc, 'r') as file:
         reg = [line.rstrip("\n") for line in file]
         lmx_reg = [int(r.split('\t')[-1], 16) for r in reg]
-    print("got here 2")
+    # print("got here 2")
     # Populate TICS file dictionary
     clk_props = {
         'lmk' : {
@@ -105,22 +111,22 @@ def _get_custom_lmclk_props(lmk_loc, lmx_loc):
             'reg'  : lmx_reg
         }
     }
-    print("got here 3")
+    # print("got here 3")
     return clk_props
 
 def _program_custom_lmclks(clk_props):
     """Program the LMK and LMX clocks using clock properties.
     """
-    print("got here 5")
+    # print("got here 5")
     # Program each device
     for lmk in xrfclk.lmk_devices:
         xrfclk.xrfclk._write_LMK_regs(clk_props['lmk']['reg'], lmk)
-    print("got here 6")
+    # print("got here 6")
     for lmx in xrfclk.lmx_devices:
         xrfclk.xrfclk._write_LMX_regs(clk_props['lmx']['reg'], lmx)
-    print("got here 7")
+    # print("got here 7")
 
-def set_custom_lmclks():
+def set_custom_lmclks(clks=None):
     """Populate LMK and LMX clocks. Search for clock files.
     Obtain the properties of the clock files. Program the
     LMK and LMX clocks with the properties of the files.
@@ -132,12 +138,12 @@ def set_custom_lmclks():
     # Get custom ref clock locs
     cwd = os.path.dirname(os.path.realpath(__file__))
     print(cwd)
-    lmk_loc, lmx_loc = _get_custom_lmclks(cwd)
+    lmk_loc, lmx_loc = _get_custom_lmclks(cwd, clks)
     print(lmk_loc)
     print(lmx_loc)
     # Get custom ref clock props
     clk_props = _get_custom_lmclk_props(lmk_loc, lmx_loc)
-    print("got here 4")
+    # print("got here 4")
     # Program custom ref clocks
     _program_custom_lmclks(clk_props)
         

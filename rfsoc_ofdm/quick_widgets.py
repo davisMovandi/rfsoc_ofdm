@@ -50,3 +50,56 @@ class DropDown():
     def get_widget(self):
         return self._dropdown
     
+
+class UserInput():
+    """
+    Helper class for user input widgets.
+    """
+
+    def __init__(self,
+                 callback,
+                 value,
+                 description,
+                 dict_id = '',
+                 min=0,
+                 max=100.0,
+                 step=0.1,
+                 readout_format='.3f'):
+    
+        def on_value_change(change):
+            callback(change['new'])
+            
+        self._dict_id = dict_id
+        self._user_input = ipw.FloatSlider(value=value,
+                                           min=min,
+                                           max=max,
+                                           step=step,
+                                           description=description,
+                                           disabled=False,
+                                           continuous_update=True,
+                                           orientation='horizontal',
+                                           readout=True,
+                                           readout_format=readout_format)
+        
+        self._user_input.observe(on_value_change, names='value')
+
+        callback(self._user_input.value)
+        
+    @property
+    def value(self):
+        return self._user_input.value
+    
+    @value.setter
+    def value(self, value):
+        self._user_input.value = value
+        
+    @property
+    def description(self):
+        return self._user_input.description
+    
+    @description.setter
+    def description(self, value):
+        self._user_input.description = value
+        
+    def get_widget(self):
+        return self._user_input

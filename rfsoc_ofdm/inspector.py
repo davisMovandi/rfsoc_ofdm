@@ -8,23 +8,29 @@ from pynq import allocate
 import numpy as np
 import math
 from .quick_widgets import DropDown
-from .sdr_plots import TimePlot, ConstellationPlot, SpectrumAnalyser
+from .sdr_plots import TimePlot, ConstellationPlot, SpectrumAnalyser, EVMPlot, PeakDataDisplay
 from .dma_timer import DmaTimer
 
 
 class Inspector(DefaultHierarchy):
     
-    def __init__(self, description, plotting_rate = 0.4, autoscale = False, init_data = False, sample_freq = 20e6):
+    def __init__(self, description, plotting_rate = 0.4, autoscale = False, init_data = False, sample_freq = 240e6, evm=False):
         super().__init__(description)
         
         self.data_inspector_module.packetsize = 64
         self.data_inspector_module.enable = 0
         self.data_inspector_module.reset = 0
+
+        self.num_peaks = 5
         
+        self.evm = evm
+
+        self.evm_data = []
+            
         self._autoscale = autoscale
         self._plotting_rate = plotting_rate
         self.buffer = allocate(shape=(int(self.data_inspector_module.packetsize*2),), dtype=np.int16)
-        
+        # self.buffer_evm = allocate(shape=(int(1024),), dtype=np.int16)
         if init_data:
             self._data = self.get_frame()
         else:
@@ -33,6 +39,9 @@ class Inspector(DefaultHierarchy):
         self._t_plot = TimePlot(self._data, animation_period=0)
         self._c_plot = ConstellationPlot(self._data, animation_period=0)
         self._f_plot = SpectrumAnalyser(self._data, fs=sample_freq, animation_period=0)
+        self._e_plot = EVMPlot(self._data, animation_period=0, autosize=False)
+        self._p_plot = PeakDataDisplay(self._data, fs=sample_freq, animation_period=0, num_peaks=self.num_peaks, return_db=True)
+        print("inside inspector init")
         self._plot_controller = DmaTimer(self._update_data, self.get_frame, self._plotting_rate)
         
     def set_frequency(self, fs):
@@ -48,26 +57,53 @@ class Inspector(DefaultHierarchy):
         tuple product to set the packetsize of the data_inspector_module.
         """
         self.buffer.freebuffer()
+        # self.buffer_evm.freebuffer()
         lshape = list(shape)
         lshape[0] = lshape[0] * 2
         tshape = tuple(lshape)
-        self.buffer = allocate(shape=tshape, dtype=np.int16)       
+        self.buffer = allocate(shape=tshape, dtype=np.int16) 
+        # self.buffer_evm = allocate(shape=tshape, dtype=np.int32)       
         product = 1 
         for i in shape:  
             product *= i
         self.data_inspector_module.packetsize = product
+        print("Packetsize set to " + str(product))
+        # if self.evm:
+        #     self.data_inspector_module_evm.packetsize = product
         
     def get_frame(self):
         """Get a single buffer of time data from the logic fabric
         """
+        
+        # print("printing self ........")
+        # print(dir(self))
+        # print(self.data_inspector_module)
         self.data_inspector_module.reset = 0
         self.axi_dma.recvchannel.transfer(self.buffer)
         self.data_inspector_module.enable = 1
+        # print(self)
+        # print("buffers size = " + str(self.buffer.size))
+        # print("started waiting....")
         self.axi_dma.recvchannel.wait()
+        # print("stopped waiting...")
         self.data_inspector_module.enable = 0
         self.data_inspector_module.reset = 1
-        t_data = np.array(self.buffer) * 2**-14
-        c_data = t_data[::2] + 1j * t_data[1::2]
+        if self.description['fullpath'] != 'InspectorEvm':
+            
+            t_data = np.array(self.buffer) * 2**-14
+            # with np.printoptions(threshold=np.inf):
+            #     print(np.vectorize(lambda x: f"0x{(x & 0xFFFF):04X}")(data_i))
+            c_data = t_data[::2] + 1j * t_data[1::2]
+            # with np.printoptions(threshold=np.inf):
+            #         print(c_data)
+        else:
+            t_data = np.array(self.buffer) 
+            with np.printoptions(threshold=np.inf):
+                print(" ".join(f"0x{(int(x) & 0xFFFF):04X}" for x in np.ravel(t_data)))
+            c_data = 20*np.log10(t_data[::2] * 2**-14)
+            # with np.printoptions(threshold=np.inf):
+            #         print(c_data)
+
         if self._autoscale:
             return self._scale_data(c_data)
         else:
@@ -76,9 +112,14 @@ class Inspector(DefaultHierarchy):
     def _update_data(self, data):
         """Update the timer and constellation plots with new data"""
         self._data = data
-        self._t_plot.update_data(data)
-        self._c_plot.update_data(data)
-        self._f_plot.update_data(data)
+        if self.description['fullpath'] == 'InspectorEvm':
+            self._e_plot.update_data(data)
+        else:
+            self._t_plot.update_data(data)
+            self._c_plot.update_data(data)
+            self._f_plot.update_data(data)
+            self._p_plot.update_data(data)
+        
     
     def spectrum_plot(self):
         return self._f_plot.get_widget()
@@ -93,10 +134,25 @@ class Inspector(DefaultHierarchy):
         """
         return self._c_plot.get_widget()
     
+    def evm_plot(self):
+        """Returns a constellation plot of inspected data
+        """
+        return self._e_plot.get_widget()
+
+    def peak_plot(self):
+        """Returns a peak data display of inspected data
+        """
+        return self._p_plot.get_widget()
+    
     def plot_control(self):
         """Return the plot controller
         """
         return self._plot_controller.get_widget()
+    
+    # def freq_control(self):
+    #     """Return the center frequency control
+    #     """
+    #     retunr self.
     
     @staticmethod
     def checkhierarchy(description):
@@ -108,21 +164,25 @@ class Inspector(DefaultHierarchy):
 
 class DualChannelInspector(Inspector):
     
-    def __init__(self, description, plotting_rate = 0.4, autoscale = False, init_data = False, sample_freq = [20e6, 240e6]):
+    def __init__(self, description, plotting_rate = 1, autoscale = False, init_data = False, sample_freq = [153.8e6, 120e6], evm = False):
         
         def _callback_control(channel):
             self.channel_switch = channel
             
-        super().__init__(description, plotting_rate, autoscale, init_data, sample_freq[0])
+        super().__init__(description, plotting_rate, autoscale, init_data, sample_freq[0], evm)
         
         self._current_channel = 0
         self.enable_switch()
-        self.data = self.get_frame()
+        if description['fullpath'] != 'InspectorEvm':
+            self.data = self.get_frame()
         self.channel_widget = DropDown(_callback_control,
                                        options=[('Channel 0', 0),
                                                 ('Channel 1', 1)],
                                        value=0,
                                        description='Channel Select: ')
+
+        
+        # self.evm measure = 
         self._sample_freq = sample_freq
         
     def disable_switch(self):
@@ -150,9 +210,9 @@ class DualChannelInspector(Inspector):
         
     @staticmethod
     def checkhierarchy(description):
-        if 'axi_dma' in description['ip'] \
-            and 'axis_switch' in description['ip'] \
-            and 'data_inspector_module' in description['ip']:
+        if ('axi_dma' in description['ip'] \
+            and 'data_inspector_module' in description['ip'] \
+            and 'axis_switch' in description['ip']):
             return True
         return False
 
