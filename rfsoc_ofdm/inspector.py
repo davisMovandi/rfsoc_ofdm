@@ -94,15 +94,15 @@ class Inspector(DefaultHierarchy):
             # with np.printoptions(threshold=np.inf):
             #     print(np.vectorize(lambda x: f"0x{(x & 0xFFFF):04X}")(data_i))
             c_data = t_data[::2] + 1j * t_data[1::2]
-            # with np.printoptions(threshold=np.inf):
-            #         print(c_data)
+            with np.printoptions(threshold=np.inf):
+                    print(c_data)
         else:
             t_data = np.array(self.buffer) 
             with np.printoptions(threshold=np.inf):
                 print(" ".join(f"0x{(int(x) & 0xFFFF):04X}" for x in np.ravel(t_data)))
             c_data = 20*np.log10(t_data[::2] * 2**-14)
-            # with np.printoptions(threshold=np.inf):
-            #         print(c_data)
+            with np.printoptions(threshold=np.inf):
+                    print(c_data)
 
         if self._autoscale:
             return self._scale_data(c_data)

@@ -27,13 +27,10 @@ class Overlay(Overlay):
         print(bitfile_name)
         # Create Overlay
         super().__init__(bitfile_name,  ignore_version=True, **kwargs)
-        print("step 1")
 
         # Determine board and set PLL appropriately
         board = os.environ['BOARD']
-        
-        print("hello im here again ")
-        # print(dir(self.rfdc))
+
         # Extract friendly dataconverter names
         if board == 'RFSoC4x2':
             self.dac_tile = self.rfdc.dac_tiles[2]
@@ -57,13 +54,10 @@ class Overlay(Overlay):
             self.adc_block = self.adc_tile.blocks[0]
         else:
             raise RuntimeError('Unknown error occurred.') # shouldn't get here
-        print(self)
-        print("about to return... i hope i have worked")
-        # return
+        
         # Start up LMX clock
         if init_rf_clks:
             clocks.set_custom_lmclks(clks)
-        print("clocks loaded")
         if board == 'ZCU216':
             fs = 1920.00
         else:
@@ -179,18 +173,13 @@ class Overlay(Overlay):
         self.ofdm_receiver.receive_enable = enable
         self.ofdm_transmitter.modulation = modulation
         
-    def initialise_evm(self, enable=1, modulation='QPSK'):
+    def initialise_evm(self, modulation='QPSK', threshold=0.03, rms_n=2048, rms_enable=1):
         """
         """
-        
-        self.evm_calc_ip_0.write(0x104, 0x01)
-        self.evm_calc_ip_0.write(0x100, 0x3334)
-
-        val = self.evm_calc_ip_0.read(0x104)
-        print("EVM Calc IP Control Reg = " + hex(val))
-        val = self.evm_calc_ip_0.read(0x100)
-        print("EVM Calc IP Control Reg = " + hex(val))
-
+        self.evm_calc_ip_0.modulation = modulation
+        self.evm_calc_ip_0.threshold = threshold
+        self.evm_calc_ip_0.rms_n = rms_n
+        self.evm_calc_ip_0.rms_enable = rms_enable
         
     def ofdm_loopback_application(self):
         """
@@ -227,7 +216,9 @@ class Overlay(Overlay):
                                                self.inspectors['constellation'].plot_control()])])
         evm_plot = ipw.VBox([self.inspectors['evm'].evm_plot(),
                                      ipw.HBox([self.inspectors['evm'].channel_widget.get_widget(),
-                                               self.inspectors['evm'].plot_control()])])
+                                               self.inspectors['evm'].plot_control()]),
+                                     ipw.HBox([self.evm_calc_ip_0.rms_n_ui.get_widget(),
+                                               self.evm_calc_ip_0.modulation_dropdown.get_widget()])])
 
         peak_data_display = ipw.VBox([self.inspectors['receiver'].peak_plot(),
                                      ipw.HBox([self.inspectors['receiver'].channel_widget.get_widget()]),
@@ -272,6 +263,8 @@ class Overlay(Overlay):
         self.inspectors['receiver'].channel_widget.value = 0
         self.inspectors['evm'].channel_widget.value = 0
         self.ofdm_transmitter.modulation_dropdown.value = '64-QAM'
+        self.evm_calc_ip_0.modulation_dropdown.value = '64-QAM'
+        self.evm_calc_ip_0.rms_n_ui.value = 2048
         
         # Attempt to start the OFDM constellation receiver
         def timeout_handler(signum, frame):

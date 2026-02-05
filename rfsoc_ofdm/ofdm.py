@@ -13,8 +13,93 @@ switcher = {'BPSK'     : 0,
             '512-QAM'  : 8,
             '1024-QAM' : 9}
 
+evm_switcher = {'QPSK'    : 0,
+                '64-QAM'  : 1}
+
 enabler = {'Disable' : 0,
            'Enable'  : 1}
+
+class EVMCore(DefaultIP):
+    """Driver for EVM calculation core logic IP
+    """
+    
+    def __init__(self,description):
+
+        def _callback_modulation(value):
+            self.modulation = value
+
+        def _callback_rms_n(value):
+            self.rms_n = value
+
+        super().__init__(description=description)
+
+        self.modulation_dropdown = DropDown(callback=_callback_modulation,
+                                            options=list(evm_switcher.keys()),
+                                            value='QPSK',
+                                            description='Modulation Scheme: ')
+        
+        self.rms_n_ui = UserInput(callback=_callback_rms_n,
+                                      value=2048,
+                                      min=128,
+                                      max=4096,
+                                      step=128,
+                                      description='RMS N: ')
+        
+    bindto = ["xilinx.com:ip:evm_calc_ip:1.9"]
+    
+    @property
+    def reset(self):
+        return self.read(0x0)
+        
+    @reset.setter
+    def reset(self, reset):
+        self.write(0x0, reset)
+        
+    @property
+    def enable(self):
+        return self.read(0x104)
+        
+    @enable.setter
+    def enable(self, enable):
+        self.write(0x104, enable)
+        
+    @property
+    def modulation(self):
+        global evm_switcher
+        scheme = self.read(0x104)
+        return list(evm_switcher.keys())[scheme]
+        
+    @modulation.setter
+    def modulation(self, modulation):
+        global evm_switcher
+        scheme = evm_switcher.get(modulation)
+        self.write(0x104, scheme)
+    
+    @property
+    def threshold(self):
+        return self.read(0x100)
+        
+    @threshold.setter
+    def threshold(self, threshold):
+        thresh = (int(threshold*2**15))
+        self.write(0x100, thresh)
+
+    @property
+    def rms_n(self):
+        return self.read(0x108)
+        
+    @rms_n.setter
+    def rms_n(self, rms_n):
+        n = (int(rms_n))
+        self.write(0x108, n)
+
+    @property
+    def rms_enable(self):
+        return self.read(0x10C)
+        
+    @rms_enable.setter
+    def rms_enable(self, enable):
+        self.write(0x10C, enable)
 
 class OFDMTxCore(DefaultIP):
     """Driver for Transmitter core logic IP
